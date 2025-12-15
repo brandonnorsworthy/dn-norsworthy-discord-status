@@ -1,6 +1,6 @@
+using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using StatusImageCard.Service;
-using System.Text.Json;
 
 DotNetEnv.Env.Load();
 

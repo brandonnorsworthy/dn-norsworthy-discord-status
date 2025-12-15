@@ -1,7 +1,7 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+﻿using System.Text.Json;
+using Microsoft.Extensions.Caching.Memory;
 using StatusImageCard.Api;
 using StatusImageCard.Models;
-using System.Text.Json;
 
 namespace StatusImageCard.Service
 {

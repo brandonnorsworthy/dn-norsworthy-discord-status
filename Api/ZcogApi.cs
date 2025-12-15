@@ -1,7 +1,6 @@
-﻿using OxyPlot.Utilities;
+﻿using System.Text.Json;
 using StatusImageCard.Helper;
 using StatusImageCard.Models;
-using System.Text.Json;
 
 namespace StatusImageCard.Api
 {
