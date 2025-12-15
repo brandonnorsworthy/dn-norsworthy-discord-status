@@ -1,0 +1,12 @@
+services:
+  norsworthy-discord-status:
+    build: .
+    container_name: norsworthy-discord-status
+    env_file:
+      - .env
+    ports:
+      - "3500:3500"
+    restart: unless-stopped
+    stop_grace_period: 90s
+    mem_limit: 512m
+    cpus: 1
