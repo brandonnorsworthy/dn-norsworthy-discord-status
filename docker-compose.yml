@@ -7,7 +7,7 @@ services:
     ports:
       - "3500:3500"
     volumes:
-      - ./data:/app/data
+      - ./data:/data
     restart: unless-stopped
     stop_grace_period: 90s
     mem_limit: 512m
