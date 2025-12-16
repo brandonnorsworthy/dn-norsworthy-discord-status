@@ -12,3 +12,7 @@ services:
     cpus: 1
     networks:
       - norsworthy-net
+
+networks:
+  norsworthy-net:
+    external: true
