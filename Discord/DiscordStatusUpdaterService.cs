@@ -1,8 +1,11 @@
-﻿using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using StatusImageCard.Config;
+using StatusImageCard.Service;
 using System.Net;
+using System.Text.Json;
 
 namespace StatusImageCard.Discord;
 
@@ -12,19 +15,30 @@ public sealed class DiscordStatusUpdaterService : BackgroundService
     private readonly IConfiguration _cfg;
     private readonly DiscordWebhookClient _discord;
     private readonly DiscordMessageIdStore _store;
+
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IContainerRotationService _rotation;
+    private readonly IMemoryCache _cache;
+    private readonly JsonSerializerOptions _jsonOpts;
 
     public DiscordStatusUpdaterService(
         ILogger<DiscordStatusUpdaterService> log,
         IConfiguration cfg,
         DiscordWebhookClient discord,
         IHttpClientFactory httpClientFactory,
-        IHostEnvironment env)
+        IHostEnvironment env,
+        IContainerRotationService containerRotationService,
+        IMemoryCache cache,
+        JsonSerializerOptions jsonOpts)
     {
         _log = log;
         _cfg = cfg;
         _discord = discord;
+
         _httpClientFactory = httpClientFactory;
+        _rotation = containerRotationService;
+        _cache = cache;
+        _jsonOpts = jsonOpts;
 
         // Always file-based; no env for message id.
         var path = Path.Combine(env.ContentRootPath, "data", "message-id.txt");
@@ -35,13 +49,10 @@ public sealed class DiscordStatusUpdaterService : BackgroundService
     {
         var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
 
-        // Run once immediately at startup
         await SafeUpdateOnceAsync(stoppingToken);
 
         while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
             await SafeUpdateOnceAsync(stoppingToken);
-        }
     }
 
     private async Task SafeUpdateOnceAsync(CancellationToken ct)
@@ -63,50 +74,49 @@ public sealed class DiscordStatusUpdaterService : BackgroundService
     private async Task UpdateOnceAsync(CancellationToken ct)
     {
         var webhookUrl = _cfg[EnvKeys.DiscordWebhookUrl];
-        var hostDomain = _cfg[EnvKeys.StatusImageUrl];
 
-        if (string.IsNullOrWhiteSpace(webhookUrl) || string.IsNullOrWhiteSpace(hostDomain))
+        if (string.IsNullOrWhiteSpace(webhookUrl))
         {
-            _log.LogInformation("Discord updater skipped: missing {WebhookKey} or {HostKey}.",
-                EnvKeys.DiscordWebhookUrl, EnvKeys.StatusImageUrl);
+            _log.LogInformation("Discord updater skipped: missing {WebhookKey}.", EnvKeys.DiscordWebhookUrl);
             return;
         }
 
-        // Keep this aligned with your /status.png route
         const int hours = 6;
+        const int cacheSeconds = 60;
+        const string fileName = "status.png";
 
         var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var cacheBust = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var cacheKey = $"status-png:rotating:{hours}";
 
-        // This URL is only used to FETCH the image bytes.
-        var fetchUrl = $"{hostDomain.TrimEnd('/')}/status.png?h={hours}&t={cacheBust}";
+        var result = await _rotation.GenerateStatusAsync(
+            cacheKey: cacheKey,
+            cacheSeconds: cacheSeconds,
+            cache: _cache,
+            httpClientFactory: _httpClientFactory,
+            jsonOpts: _jsonOpts,
+            hours: hours,
+            pinnedContainerSelector: null,
+            ct: ct);
 
-        if (!fetchUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"STATUS_IMAGE_URL must be https for Discord embeds. Got: {fetchUrl}");
-
-        _log.LogInformation("Fetching status image from: {FetchUrl}", fetchUrl);
-
-        // Fetch image bytes so we can upload as an attachment
-        var fetchClient = _httpClientFactory.CreateClient("image-fetch");
-        var pngBytes = await fetchClient.GetByteArrayAsync(fetchUrl, ct);
-
-        const string fileName = "status.png";
+        var currentServer = result.CurrentlyShowing;
+        var onlineServers = result.OnlineServers;
+        var pngBytes = result.PngBytes;
 
         var payload = new
         {
-            // Optional top-level message content (leave null/omit if you don't want a message body)
-            // content = "Current Server Status",
             embeds = new[]
             {
                 new
                 {
                     title = "Current Server Status",
-                    description = $"Status Generated at <t:{nowUnix}>, Current View: Last {hours} hours",
+                    description =
+                        $"Generated at <t:{nowUnix}>\n" +
+                        $"Current Online Servers: {string.Join(", ", onlineServers)}",
                     image = new { url = $"attachment://{fileName}" },
                     color = 3066993
                 }
             },
-            // Important when editing: prevents old attachments sticking around
+            // Prevent old attachments sticking around on edits.
             attachments = Array.Empty<object>()
         };
 

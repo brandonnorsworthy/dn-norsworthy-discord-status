@@ -8,7 +8,7 @@ using StatusImageCard.Models;
 
 namespace StatusImageCard.Service
 {
-    public sealed class ContainerRotationService
+    public sealed class ContainerRotationService : IContainerRotationService
     {
         private readonly SemaphoreSlim _gate = new(1, 1);
         private readonly IConfiguration _cfg;
@@ -45,6 +45,111 @@ namespace StatusImageCard.Service
 
         private static bool IsOnline(ZcogContainerModel c) =>
             c.State.Equals("running", StringComparison.OrdinalIgnoreCase);
+
+        public async Task<StatusImageModel> GenerateStatusAsync(
+         string cacheKey,
+         int cacheSeconds,
+         IMemoryCache cache,
+         IHttpClientFactory httpClientFactory,
+         JsonSerializerOptions jsonOpts,
+         int hours,
+         string? pinnedContainerSelector,
+         CancellationToken ct)
+        {
+            await _gate.WaitAsync(ct);
+            try
+            {
+                // Always refresh whitelist before snapshot usage
+                ReloadWhitelist();
+
+                // Fetch snapshot once for online count + selection
+                var all = await _internalApiService.FetchSnapshotAsync(httpClientFactory, jsonOpts, ct);
+                var onlineWhitelisted = all.Where(IsAllowed).Where(IsOnline).ToList();
+                var onlineCount = onlineWhitelisted.Count;
+
+                // If PNG exists in cache, still return correct metadata (no stale description)
+                if (cache.TryGetValue(cacheKey, out byte[]? existing) && existing != null)
+                {
+                    var showing = ResolveCurrentlyShowing(onlineWhitelisted, pinnedContainerSelector);
+                    return new StatusImageModel
+                    {
+                        PngBytes = existing,
+                        CurrentlyShowing = showing,
+                        OnlineServers = onlineWhitelisted
+                            .Select(c => c.Name == showing ? $"[{c.Name}]" : c.Name)
+                            .ToArray()
+                    };
+                }
+
+                byte[] png;
+                string showingText;
+
+                if (!string.IsNullOrWhiteSpace(pinnedContainerSelector))
+                {
+                    var card = await _internalApiService.FetchFromApi(httpClientFactory, pinnedContainerSelector, hours, jsonOpts, ct);
+                    png = StatusCardRenderService.Render(card, width: 640, height: 420);
+                    showingText = card.Name;
+                }
+                else
+                {
+                    // rotate through the online list deterministically per process
+                    if (_snapshot == null || _snapshot.Count == 0)
+                    {
+                        _snapshot = onlineWhitelisted;
+                        _index = -1;
+                    }
+
+                    if (_snapshot.Count == 0)
+                    {
+                        png = StatusCardRenderService.RenderAllOffline(width: 640, height: 420);
+                        showingText = "All offline";
+                    }
+                    else
+                    {
+                        _index++;
+                        if (_index >= _snapshot.Count) _index = 0;
+
+                        var next = _snapshot[_index];
+                        var card = await _internalApiService.FetchFromApi(httpClientFactory, next.Id, hours, jsonOpts, ct);
+                        png = StatusCardRenderService.Render(card, width: 640, height: 420);
+                        showingText = next.Name;
+                    }
+                }
+
+                cache.Set(cacheKey, png, new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(cacheSeconds)
+                });
+
+                return new StatusImageModel
+                {
+                    PngBytes = png,
+                    CurrentlyShowing = showingText,
+                    OnlineServers = onlineWhitelisted
+                        .Select(c => c.Name == showingText ? $"[{c.Name}]" : c.Name)
+                        .ToArray()
+                };
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        private static string ResolveCurrentlyShowing(List<ZcogContainerModel> onlineWhitelisted, string? pinnedSelector)
+        {
+            if (!string.IsNullOrWhiteSpace(pinnedSelector))
+            {
+                var pinned = onlineWhitelisted.FirstOrDefault(x =>
+                    x.Name.Equals(pinnedSelector, StringComparison.OrdinalIgnoreCase) ||
+                    x.Id.StartsWith(pinnedSelector, StringComparison.OrdinalIgnoreCase));
+
+                return pinned?.Name ?? pinnedSelector;
+            }
+
+            if (onlineWhitelisted.Count == 0) return "All offline";
+            return onlineWhitelisted[0].Name;
+        }
 
         public async Task<byte[]> GeneratePngAsync(
             string cacheKey,

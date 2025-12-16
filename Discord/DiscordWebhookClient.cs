@@ -71,8 +71,16 @@ public sealed class DiscordWebhookClient
         fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         form.Add(fileContent, "files[0]", fileName);
 
-        using var res = await _http.PostAsync($"{webhookUrl.TrimEnd('/')}?wait=true", form, ct);
-        res.EnsureSuccessStatusCode();
+        HttpResponseMessage res;
+        try
+        {
+            res = await _http.PostAsync($"{webhookUrl.TrimEnd('/')}?wait=true", form, ct);
+            res.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            throw new HttpRequestException("Discord send with file failed.", ex);
+        }
 
         using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
         var id = doc.RootElement.GetProperty("id").GetString();
@@ -103,7 +111,17 @@ public sealed class DiscordWebhookClient
         form.Add(fileContent, "files[0]", fileName);
 
         using var req = new HttpRequestMessage(HttpMethod.Patch, editUrl) { Content = form };
-        using var res = await _http.SendAsync(req, ct);
+
+        HttpResponseMessage res;
+        try
+        {
+            res = await _http.SendAsync(req, ct);
+        }
+        catch (Exception ex)
+        {
+            throw new HttpRequestException("Discord edit with file failed.", ex);
+        }
+
 
         if (res.StatusCode == HttpStatusCode.NotFound)
             return res.StatusCode;

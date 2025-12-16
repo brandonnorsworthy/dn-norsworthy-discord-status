@@ -35,18 +35,18 @@ namespace StatusImageCard.Service
             float x0 = cardRect.Left + 18;
             float y0 = cardRect.Top + 16;
 
-            var iconRect = new SKRect(x0, y0, x0 + 34, y0 + 34);
+            var iconRect = new SKRect(x0, y0 + 6, x0 + 40, y0 + 40 + 6);
             DrawIconBadge(canvas, iconRect);
 
-            float textLeft = iconRect.Right + 12;
+            float textLeft = iconRect.Right + 16;
 
             using var nameFont = new SKFont { Size = 20 };
             using var namePaint = new SKPaint { IsAntialias = true, Color = MainText };
-            canvas.DrawText(c.Name, textLeft, y0 + 22, SKTextAlign.Left, nameFont, namePaint);
+            canvas.DrawText(c.Name, textLeft, y0 + 24, SKTextAlign.Left, nameFont, namePaint);
 
             using var idFont = new SKFont { Size = 13 };
             using var idPaint = new SKPaint { IsAntialias = true, Color = MutedText };
-            canvas.DrawText(c.IdShort, textLeft, y0 + 40, SKTextAlign.Left, idFont, idPaint);
+            canvas.DrawText(c.IdShort, textLeft, y0 + 44, SKTextAlign.Left, idFont, idPaint);
 
             string pillText = c.StatusText;
             var (pillFill, pillTextColor) = c.StatusState == StatusState.Online
@@ -56,9 +56,9 @@ namespace StatusImageCard.Service
             using var pillFont = new SKFont { Size = 13 };
             float pillPadX = 14, pillPadY = 8;
             float pillW = pillFont.MeasureText(pillText) + pillPadX * 2;
-            float pillH = pillFont.Size + pillPadY * 2;
+            float pillH = pillFont.Size + pillPadY;
 
-            var pillRect = new SKRect(cardRect.Right - 18 - pillW, y0 + 4, cardRect.Right - 18, y0 + 4 + pillH);
+            var pillRect = new SKRect(cardRect.Right - 18 - pillW, y0 + 6, cardRect.Right - 18, y0 + 10 + pillH);
             DrawRoundedRect(canvas, pillRect, pillH / 2f, pillFill, border: null);
 
             using var pillPaint = new SKPaint { IsAntialias = true, Color = pillTextColor };
@@ -67,7 +67,7 @@ namespace StatusImageCard.Service
 
             using var upFont = new SKFont { Size = 13 };
             using var upPaint = new SKPaint { IsAntialias = true, Color = MutedText };
-            canvas.DrawText($"{c.UptimeText} ({c.HealthText})", x0, y0 + 72, SKTextAlign.Left, upFont, upPaint);
+            canvas.DrawText($"{c.UptimeText} ({c.HealthText})", x0, y0 + 75, SKTextAlign.Left, upFont, upPaint);
 
             float metricsY = y0 + 104;
 
@@ -95,7 +95,7 @@ namespace StatusImageCard.Service
                 canvas.DrawText(c.Subtitle, x0, legendY + 22, SKTextAlign.Left, subFont, subPaint);
             }
 
-            var plotRect = new SKRect(cardRect.Left + 50, legendY + 16, cardRect.Right - 24, cardRect.Bottom - 22);
+            var plotRect = new SKRect(cardRect.Left + 5, legendY + 16, cardRect.Right - 5, cardRect.Bottom - 22);
 
             var plot = OxyChartService.BuildUsagePlot(c.UsageLastDay);
             var chartPng = OxyChartService.RenderPlotPng(plot, (int)plotRect.Width, (int)plotRect.Height);
@@ -140,23 +140,6 @@ namespace StatusImageCard.Service
         private static void DrawIconBadge(SKCanvas canvas, SKRect rect)
         {
             DrawRoundedRect(canvas, rect, 10, SKColor.Parse("#1f232b"), border: SKColor.Parse("#2b303a"));
-
-            using var p = new SKPaint { IsAntialias = true, Color = MainText, Style = SKPaintStyle.Stroke, StrokeWidth = 1.8f };
-
-            float cx = rect.MidX, cy = rect.MidY;
-            float s = rect.Width * 0.22f;
-
-            var f = new SKRect(cx - s, cy - s, cx + s, cy + s);
-            canvas.DrawRect(f, p);
-
-            float o = s * 0.7f;
-            var b = new SKRect(f.Left - o, f.Top - o, f.Right - o, f.Bottom - o);
-            canvas.DrawRect(b, p);
-
-            canvas.DrawLine(f.Left, f.Top, b.Left, b.Top, p);
-            canvas.DrawLine(f.Right, f.Top, b.Right, b.Top, p);
-            canvas.DrawLine(f.Left, f.Bottom, b.Left, b.Bottom, p);
-            canvas.DrawLine(f.Right, f.Bottom, b.Right, b.Bottom, p);
         }
 
         private static void DrawInlineLabelValue(SKCanvas canvas, float x, float y, string label, string value, SKColor labelColor, SKColor valueColor)
