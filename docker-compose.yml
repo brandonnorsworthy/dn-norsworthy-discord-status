@@ -10,3 +10,5 @@ services:
     stop_grace_period: 90s
     mem_limit: 512m
     cpus: 1
+    networks:
+      - norsworthy-net
