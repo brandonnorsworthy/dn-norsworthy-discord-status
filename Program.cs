@@ -35,7 +35,7 @@ builder.Services.AddHttpClient("api", c =>
     if (string.IsNullOrEmpty(baseUrl))
         throw new Exception("BASE_URL configuration is required for API client.");
     c.BaseAddress = new Uri(baseUrl);
-    c.Timeout = TimeSpan.FromSeconds(60);
+    c.Timeout = TimeSpan.FromSeconds(30);
 });
 
 var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -53,7 +53,7 @@ app.MapGet("/status.png", async (
     CancellationToken ct) =>
 {
     const int hours = 6;
-    const int cacheSeconds = 60;
+    const int cacheSeconds = 60 * 5;
 
     try
     {
