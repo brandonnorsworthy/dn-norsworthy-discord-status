@@ -3,7 +3,7 @@ using StatusImageCard.Models;
 
 namespace StatusImageCard.Service
 {
-    public static class StatusCardRenderService
+    public static partial class StatusCardRenderService
     {
         private static readonly SKColor PageBg = SKColor.Parse("#0b0d10");
         private static readonly SKColor CardBg = SKColor.Parse("#14161a");
@@ -178,6 +178,44 @@ namespace StatusImageCard.Service
             using var f = new SKFont { Size = 12 };
             using var p = new SKPaint { IsAntialias = true, Color = MainText };
             canvas.DrawText(text, x + 10, y, SKTextAlign.Left, f, p);
+        }
+    }
+
+    public static partial class StatusCardRenderService
+    {
+        private static readonly SKColor ErrorText = SKColor.Parse("#ef4444");
+
+        public static byte[] RenderAllOffline(int width, int height)
+        {
+            using var bmp = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+            using var canvas = new SKCanvas(bmp);
+
+            canvas.Clear(PageBg);
+
+            float pad = 18;
+            var cardRect = new SKRect(pad, pad, width - pad, height - pad);
+
+            DrawShadowedCard(canvas, cardRect, 18);
+
+            using var titleFont = new SKFont { Size = 24 };
+            using var titlePaint = new SKPaint { IsAntialias = true, Color = ErrorText };
+
+            using var subFont = new SKFont { Size = 13 };
+            using var subPaint = new SKPaint { IsAntialias = true, Color = MutedText };
+
+            var title = "All servers offline";
+            var sub = "No whitelisted containers are currently running.";
+
+            // center vertically a bit above middle
+            float cx = cardRect.MidX;
+            float cy = cardRect.MidY;
+
+            canvas.DrawText(title, cx, cy - 6, SKTextAlign.Center, titleFont, titlePaint);
+            canvas.DrawText(sub, cx, cy + 18, SKTextAlign.Center, subFont, subPaint);
+
+            using var img = SKImage.FromBitmap(bmp);
+            using var data = img.Encode(SKEncodedImageFormat.Png, 100);
+            return data.ToArray();
         }
     }
 }

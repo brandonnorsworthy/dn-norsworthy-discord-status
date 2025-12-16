@@ -1,54 +1,79 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using StatusImageCard.Api;
+using StatusImageCard.Config;
 using StatusImageCard.Service;
+using StatusImageCard.Helper;
+using StatusImageCard.Discord;
 
 DotNetEnv.Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.AddEnvironmentVariables();
+
+RequireHelper.Require(builder.Configuration, EnvKeys.BaseUrl);
+RequireHelper.Require(builder.Configuration, EnvKeys.ContainerWhitelist);
+RequireHelper.Require(builder.Configuration, EnvKeys.DiscordWebhookUrl);
+RequireHelper.Require(builder.Configuration, EnvKeys.StatusImageUrl);
+
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ContainerRotationService>();
+builder.Services.AddSingleton<IInternalApiService, InternalApiService>();
 
-builder.Services.AddHttpClient("zcog", c =>
+// Typed Discord client (used by DiscordStatusUpdaterService)
+builder.Services.AddHttpClient<DiscordWebhookClient>(c =>
 {
-    var baseUrl = builder.Configuration["BASE_URL"] ?? throw new Exception("Missing BASE_URL");
+    c.Timeout = TimeSpan.FromSeconds(10);
+});
+
+// Needed so DiscordStatusUpdaterService can fetch the PNG bytes from STATUS_IMAGE_URL
+builder.Services.AddHttpClient("image-fetch", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(10);
+});
+
+builder.Services.AddHostedService<DiscordStatusUpdaterService>();
+
+builder.Services.AddHttpClient("api", c =>
+{
+    var baseUrl = builder.Configuration[EnvKeys.BaseUrl];
+    if (string.IsNullOrEmpty(baseUrl))
+        throw new Exception("BASE_URL configuration is required for API client.");
     c.BaseAddress = new Uri(baseUrl);
     c.Timeout = TimeSpan.FromSeconds(3);
 });
 
-var jsonOpts = new JsonSerializerOptions
-{
-    PropertyNameCaseInsensitive = true
-};
+var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+builder.Services.AddSingleton(jsonOpts);
 
 var app = builder.Build();
 
-app.MapGet("/status.png", async (HttpContext http, IHttpClientFactory httpClientFactory, IMemoryCache cache, ContainerRotationService rotation, CancellationToken ct) =>
+app.Lifetime.ApplicationStarted.Register(() =>
 {
-    // Hours stays user-configurable
-    int hours = 0;
-    if (http.Request.Query.TryGetValue("h", out var hv) && int.TryParse(hv.ToString(), out var hParsed)) hours = hParsed;
-    else if (int.TryParse(Environment.GetEnvironmentVariable("DEFAULT_HOURS"), out var hEnv)) hours = hEnv;
-    else hours = 24;
+    var v = app.Configuration[EnvKeys.StatusImageUrl];
+    app.Logger.LogInformation("STATUS_IMAGE_URL resolved to: {Value}", v);
+});
 
-    // Rotation cache window (fixed 60s per your requirement)
+app.MapGet("/status.png", async (
+    HttpContext http,
+    IHttpClientFactory httpClientFactory,
+    IMemoryCache cache,
+    ContainerRotationService rotation,
+    CancellationToken ct) =>
+{
+    const int hours = 6;
     const int cacheSeconds = 60;
 
-    // If container query is provided, do "pinned" rendering. Otherwise rotate.
     bool pinned = http.Request.Query.TryGetValue("container", out var cv) && !string.IsNullOrWhiteSpace(cv.ToString());
     string? containerSelector = pinned ? cv.ToString() : null;
 
-    // Cache key: one key for rotating, or per-container for pinned
     string cacheKey = pinned
         ? $"status-png:pinned:{containerSelector}:{hours}"
         : $"status-png:rotating:{hours}";
 
     if (!cache.TryGetValue(cacheKey, out byte[]? png) || png == null)
-    {
-        // Lock so only one request generates when cache expires
         png = await rotation.GeneratePngAsync(cacheKey, cacheSeconds, cache, httpClientFactory, jsonOpts, hours, containerSelector, ct);
-    }
 
     http.Response.Headers.CacheControl = $"public,max-age={cacheSeconds}";
     return Results.File(png, "image/png");

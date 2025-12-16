@@ -1,16 +1,25 @@
-﻿using System.Text.Json;
-using StatusImageCard.Helper;
+﻿using StatusImageCard.Helper;
 using StatusImageCard.Models;
+using StatusImageCard.Service;
+using System.ComponentModel;
+using System.Text.Json;
 
 namespace StatusImageCard.Api
 {
-    public class ZcogApi
+    public class InternalApiService : IInternalApiService
     {
-        public static async Task<ContainerCard> FetchFromApi(IHttpClientFactory factory, string containerSelector, int hours, JsonSerializerOptions jsonOpts, CancellationToken ct)
+        private readonly ILogger<InternalApiService> _log;
+
+        public InternalApiService(ILogger<InternalApiService> log)
+        {
+            _log = log;
+        }
+
+        public async Task<ContainerCard> FetchFromApi(IHttpClientFactory factory, string containerSelector, int hours, JsonSerializerOptions jsonOpts, CancellationToken ct)
         {
             try
             {
-                var client = factory.CreateClient("zcog");
+                var client = factory.CreateClient("api");
 
                 // 1) current snapshot list
                 var listResp = await client.GetAsync("/api/containers/stats/", ct);
@@ -39,12 +48,12 @@ namespace StatusImageCard.Api
             }
             catch (Exception)
             {
-                Console.WriteLine("Failed to fetch");
+                _log.LogError("Error fetching container data for '{ContainerSelector}'", containerSelector);
                 throw;
             }
         }
 
-        private static ContainerCard MapToCard(ZcogContainerModel current, List<ZcogContainerModel> history, int hours)
+        private ContainerCard MapToCard(ZcogContainerModel current, List<ZcogContainerModel> history, int hours)
         {
             // memory values from your API appear to be MB; convert to GB for display
             double usedGb = current.MemoryCurrent / 1024.0;
@@ -53,7 +62,6 @@ namespace StatusImageCard.Api
             var state = current.State?.Equals("running", StringComparison.OrdinalIgnoreCase) == true
                 ? StatusState.Online
                 : StatusState.Offline;
-            Console.WriteLine(current);
 
             string statusText = state == StatusState.Online ? "Online" : "Offline";
 
@@ -90,9 +98,9 @@ namespace StatusImageCard.Api
             };
         }
 
-        public static async Task<List<ZcogContainerModel>> FetchSnapshotAsync(IHttpClientFactory httpClientFactory, JsonSerializerOptions jsonOpts, CancellationToken ct)
+        public async Task<List<ZcogContainerModel>> FetchSnapshotAsync(IHttpClientFactory httpClientFactory, JsonSerializerOptions jsonOpts, CancellationToken ct)
         {
-            var client = httpClientFactory.CreateClient("zcog");
+            var client = httpClientFactory.CreateClient("api");
 
             var listResp = await client.GetAsync("/api/containers/stats/", ct);
             listResp.EnsureSuccessStatusCode();
