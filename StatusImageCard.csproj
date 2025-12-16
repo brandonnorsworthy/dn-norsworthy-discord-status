@@ -11,6 +11,8 @@
     <PackageReference Include="OxyPlot.SkiaSharp" Version="2.2.0" />
     <PackageReference Include="SkiaSharp" Version="3.119.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.9" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="7.3.0" />
   </ItemGroup>
 
   <ItemGroup>
