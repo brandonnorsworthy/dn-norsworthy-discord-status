@@ -13,4 +13,6 @@ dotnet watch run
 
 Deploying:
 
-docker compose up --build -d
+## Must be done if updating ENVs
+
+docker compose up -d --build --force-recreate
