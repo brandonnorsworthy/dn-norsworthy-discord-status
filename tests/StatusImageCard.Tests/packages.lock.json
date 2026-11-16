@@ -51,11 +51,8 @@
       },
       "HarfBuzzSharp.NativeAssets.Linux": {
         "type": "Transitive",
-        "resolved": "7.3.0",
-        "contentHash": "m6F2pEBTN0zTRgQ3caJQRGQkZZizZwHHCbu+rTv+gvwteNBOpqOLD5GE4dB9TFjNNpnyHXtfuMD86JuUra9UvA==",
-        "dependencies": {
-          "HarfBuzzSharp": "7.3.0"
-        }
+        "resolved": "14.4.0.101",
+        "contentHash": "HXEBUae/OsEpSIc+cbhMvAkPpjbFE03cV8eyaVO2fvvuZNNwjYPxYKkTpnNMbrl/u7buPosjT2A2Dku5SgYjRA=="
       },
       "HarfBuzzSharp.NativeAssets.macOS": {
         "type": "Transitive",
@@ -227,7 +224,7 @@
         "type": "Project",
         "dependencies": {
           "DotNetEnv": "[3.1.1, )",
-          "HarfBuzzSharp.NativeAssets.Linux": "[7.3.0, )",
+          "HarfBuzzSharp.NativeAssets.Linux": "[14.4.0.101, )",
           "OxyPlot.SkiaSharp": "[2.2.0, )",
           "SkiaSharp": "[3.119.1, )",
           "SkiaSharp.NativeAssets.Linux": "[3.119.1, )"
