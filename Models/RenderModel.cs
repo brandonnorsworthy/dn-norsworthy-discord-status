@@ -19,8 +19,11 @@
         /// <summary>Pill text: "Online" or "Offline".</summary>
         public required string StatusText { get; init; }
 
-        /// <summary>Line under the name: "Up 2 weeks (healthy)" or the monitor's status, e.g. "Exited (0) 2 months ago".</summary>
+        /// <summary>Line under the name: "up for 2 weeks" or the monitor's status, e.g. "Exited (0) 2 months ago".</summary>
         public required string DetailText { get; init; }
+
+        /// <summary>Health of an online container (drives the heart icon); null when offline.</summary>
+        public bool? Healthy { get; init; }
 
         public required string CpuText { get; init; }
         public required string MemoryText { get; init; }

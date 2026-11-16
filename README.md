@@ -10,7 +10,7 @@ One Discord message that always shows the current status of every game server I 
 
 **Feature set (finished product):**
 
-- One PNG grid with a tile per whitelisted game server: name, short id, online/offline pill, uptime and health, current CPU and memory, and a 6-hour CPU/memory history graph.
+- One PNG grid with a tile per whitelisted game server: name, short id, online/offline pill, a health heart (green or red), plain uptime ("up for 2 weeks"), current CPU and memory, and a 6-hour CPU/memory history graph.
 - Offline servers stay in the grid as dimmed tiles, so a stopped server is visible rather than missing.
 - A Discord webhook message that is posted once and then edited in place every 5 minutes (a deleted message is re-posted automatically).
 - `GET /status.png` serves the same grid (cached for 60 seconds); `GET /status.png?container=<name>` serves one server's card.

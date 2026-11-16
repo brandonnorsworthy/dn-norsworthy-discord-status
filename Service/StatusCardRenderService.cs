@@ -23,6 +23,8 @@ namespace StatusImageCard.Service
         private static readonly SKColor OfflinePill = SKColor.Parse("#4b5260");
         private static readonly SKColor OfflineText = MainText;
 
+        private static readonly SKColor UnhealthyRed = SKColor.Parse("#ef4444");
+
         private static readonly SKColor CpuBlue = SKColor.Parse("#3b82f6");
         private static readonly SKColor MemGreen = SKColor.Parse("#22c55e");
 
@@ -108,7 +110,16 @@ namespace StatusImageCard.Service
             canvas.DrawText(pillText, pillRect.Left + pillPadX, pillRect.MidY + pillFont.Size * 0.35f,
                 SKTextAlign.Left, pillFont, pillPaint);
 
-            float nameMaxW = pillRect.Left - 12 - textLeft;
+            float rightEdge = pillRect.Left;
+            if (c.Healthy is { } healthy)
+            {
+                const float heartW = 22;
+                float heartLeft = pillRect.Left - 10 - heartW;
+                DrawHeart(canvas, heartLeft, pillRect.MidY - heartW * 0.45f, heartW, healthy ? OnlinePill : UnhealthyRed);
+                rightEdge = heartLeft;
+            }
+
+            float nameMaxW = rightEdge - 12 - textLeft;
 
             using var nameFont = new SKFont { Size = 20 };
             using var namePaint = new SKPaint { IsAntialias = true, Color = MainText };
@@ -162,6 +173,18 @@ namespace StatusImageCard.Service
 
             using var chartBmp = SKBitmap.Decode(chartPng);
             canvas.DrawBitmap(chartBmp, plotRect);
+        }
+
+        private static void DrawHeart(SKCanvas canvas, float left, float top, float w, SKColor color)
+        {
+            float h = w * 0.9f;
+            using var path = new SKPath();
+            path.MoveTo(left + w / 2, top + h);
+            path.CubicTo(left - w * 0.1f, top + h * 0.55f, left + w * 0.1f, top - h * 0.1f, left + w / 2, top + h * 0.3f);
+            path.CubicTo(left + w * 0.9f, top - h * 0.1f, left + w * 1.1f, top + h * 0.55f, left + w / 2, top + h);
+            path.Close();
+            using var paint = new SKPaint { IsAntialias = true, Color = color, Style = SKPaintStyle.Fill };
+            canvas.DrawPath(path, paint);
         }
 
         private static void DrawCentredMessage(SKCanvas canvas, SKRect area, string text, float size)

@@ -35,8 +35,9 @@ namespace StatusImageCard.Service
             }
 
             // The status string carries the "Up ..." text, e.g. "Up 26 hours (healthy)".
-            string uptime = ContainerTextHelper.ExtractUpPrefix(current.Status) is { Length: > 0 } up ? up : "Up";
-            string health = ContainerTextHelper.ExtractHealthSuffix(current.Status) ?? "healthy";
+            string uptime = ContainerTextHelper.FormatUptime(current.Status);
+            bool healthy = (ContainerTextHelper.ExtractHealthSuffix(current.Status) ?? "healthy")
+                .Equals("healthy", StringComparison.OrdinalIgnoreCase);
 
             // Memory values from the API are MB; show GB.
             double usedGb = Math.Round(current.MemoryCurrent / 1024.0, 2);
@@ -57,7 +58,8 @@ namespace StatusImageCard.Service
                 IdShort = idShort,
                 StatusState = StatusState.Online,
                 StatusText = "Online",
-                DetailText = $"{uptime} ({health})",
+                DetailText = uptime,
+                Healthy = healthy,
                 CpuText = string.Format(CultureInfo.InvariantCulture, "{0:0.##}%", current.CpuPercent),
                 MemoryText = string.Format(CultureInfo.InvariantCulture, "{0:0.##}GB / {1:0.##}GB", usedGb, maxGb),
                 Subtitle = subtitle,

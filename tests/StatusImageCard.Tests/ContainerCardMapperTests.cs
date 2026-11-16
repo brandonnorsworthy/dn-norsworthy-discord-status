@@ -18,7 +18,8 @@ public class ContainerCardMapperTests
         Assert.Equal("00ab5b82043b...", card.IdShort);
         Assert.Equal(StatusState.Online, card.StatusState);
         Assert.Equal("Online", card.StatusText);
-        Assert.Equal("Up 3 weeks (unhealthy)", card.DetailText);
+        Assert.Equal("up for 3 weeks", card.DetailText);
+        Assert.False(card.Healthy);
         Assert.Equal("3.77%", card.CpuText);
         Assert.Equal("5.37GB / 16GB", card.MemoryText);
         Assert.Equal("Usage History (Last 6 hours)", card.Subtitle);
@@ -31,7 +32,8 @@ public class ContainerCardMapperTests
     public void Online_status_without_health_defaults_to_healthy()
     {
         var c = TestData.Container("valheim", running: true, status: "Up 3 weeks");
-        Assert.Equal("Up 3 weeks (healthy)", ContainerCardMapper.Map(c, null, 6).DetailText);
+        Assert.Equal("up for 3 weeks", ContainerCardMapper.Map(c, null, 6).DetailText);
+        Assert.True(ContainerCardMapper.Map(c, null, 6).Healthy);
     }
 
     [Fact]

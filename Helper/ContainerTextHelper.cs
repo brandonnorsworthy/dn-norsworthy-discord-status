@@ -24,6 +24,14 @@ namespace StatusImageCard.Helper
             return idx > 0 ? status[..idx].Trim() : status;
         }
 
+        public static string FormatUptime(string status)
+        {
+            // "Up 26 hours (healthy)" -> "up for 26 hours"; "Up About a minute" -> "up for about a minute"
+            string up = ExtractUpPrefix(status) ?? "";
+            if (up.StartsWith("Up", StringComparison.OrdinalIgnoreCase)) up = up[2..].Trim();
+            return up.Length > 0 ? "up for " + up.ToLowerInvariant() : "up";
+        }
+
         public static string? ExtractHealthSuffix(string status)
         {
             // "Up 26 hours (healthy)" -> "healthy"
