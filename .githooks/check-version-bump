@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# CI guard for the hook: fails when code changed between two refs but the version did not.
+# Usage: .githooks/check-version-bump <base-ref> <head-ref>
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+. .githooks/version.sh
+base="$1"
+head="$2"
+
+if ! git diff --name-only "$base...$head" | has_code_change; then
+  echo "No code changes between $base and $head: no version bump needed."
+  exit 0
+fi
+old=$(version_read "$(git merge-base "$base" "$head")")
+new=$(version_read "$head")
+if [ "$old" = "$new" ]; then
+  echo "Code changed but the version is still $new." >&2
+  echo "Turn the hooks on (git config core.hooksPath .githooks) and commit again, or bump it by hand." >&2
+  exit 1
+fi
+echo "Version bumped: $old -> $new"

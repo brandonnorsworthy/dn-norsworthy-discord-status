@@ -1,0 +1,38 @@
+# Keep the dependency surface fresh and reviewed (see docs/public-repos.md in the workspace docs)
+version: 2
+updates:
+  # NuGet packages (app and tests; lock files are updated with them)
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      # SkiaSharp and its native-asset packages must stay on the same version
+      skiasharp:
+        patterns:
+          - "SkiaSharp*"
+      # xunit and the test SDK move together
+      test-tooling:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+    open-pull-requests-limit: 10
+
+  # GitHub Actions (SHA-pinned; Dependabot updates the SHA and the version comment)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      # codeql-action/init and analyze must be on the same version
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
+    open-pull-requests-limit: 10
+
+  # Docker base images (sdk and aspnet)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10

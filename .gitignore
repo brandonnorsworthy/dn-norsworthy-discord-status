@@ -3,9 +3,13 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
-# dotenv files
+# dotenv files (real values never get committed; .env.example is the placeholder)
 .env
-/data/*
+.env.*
+!.env.example
+
+# Local runtime state (message-id.txt), mounted at /app/data in the container
+/data/
 
 # User-specific files
 *.rsuser

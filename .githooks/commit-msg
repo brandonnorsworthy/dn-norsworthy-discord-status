@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Decides the version bump from the commit message and leaves it for post-commit
+# (git has already built the commit's tree by now, so the bump is folded in afterwards).
+#   feat!: / type!: / "BREAKING CHANGE:"  -> major
+#   feat:                                  -> minor
+#   anything else that changes code        -> patch
+#   docs-only, CI-only, hooks-only         -> no bump
+set -euo pipefail
+[ -n "${VERSION_BUMP_RUNNING:-}" ] && exit 0
+
+cd "$(git rev-parse --show-toplevel)"
+. .githooks/version.sh
+git_dir=$(git rev-parse --absolute-git-dir)
+marker="$git_dir/VERSION_BUMP"
+rm -f "$marker"
+
+# Merges, rebases and cherry-picks replay existing commits; they never bump.
+for f in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply; do
+  [ -e "$git_dir/$f" ] && exit 0
+done
+
+git diff --cached --name-only | has_code_change || exit 0
+
+message=$(grep -v '^#' "$1" || true)
+subject=$(printf '%s\n' "$message" | sed -n '/./{p;q}')
+if printf '%s\n' "$subject" | grep -Eq '^[a-zA-Z]+(\([^)]*\))?!:' ||
+  printf '%s\n' "$message" | grep -q '^BREAKING CHANGE:'; then
+  echo major >"$marker"
+elif printf '%s\n' "$subject" | grep -Eq '^feat(\([^)]*\))?:'; then
+  echo minor >"$marker"
+else
+  echo patch >"$marker"
+fi

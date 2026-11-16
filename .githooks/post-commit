@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Applies the bump commit-msg decided on and folds it into the commit just made.
+set -euo pipefail
+[ -n "${VERSION_BUMP_RUNNING:-}" ] && exit 0
+
+cd "$(git rev-parse --show-toplevel)"
+. .githooks/version.sh
+marker="$(git rev-parse --absolute-git-dir)/VERSION_BUMP"
+[ -f "$marker" ] || exit 0
+level=$(cat "$marker")
+rm -f "$marker"
+
+# The first commit of a repo keeps the version it was written with.
+git rev-parse -q --verify HEAD^ >/dev/null || exit 0
+
+current=$(version_read HEAD)
+previous=$(version_read HEAD^)
+# The version was already changed in this commit (by hand, or this is an amend).
+[ "$current" != "$previous" ] && exit 0
+
+if ! git diff --quiet -- "${VERSION_FILES[@]}"; then
+  echo "version hook: ${VERSION_FILES[*]} has uncommitted changes, so the $level bump was NOT applied." >&2
+  echo "version hook: commit or stash them, bump the version by hand and amend." >&2
+  exit 0
+fi
+
+new=$(next_version "$current" "$level")
+version_write "$new"
+git add -- "${VERSION_FILES[@]}"
+VERSION_BUMP_RUNNING=1 git commit --amend --no-edit --no-verify --quiet
+echo "version hook: $current -> $new ($level)"
