@@ -24,11 +24,11 @@ What it looks like (the grid posted to Discord):
 
 ## Phases
 
-Current phase: **Phase 2**.
+Phases 0 to 2 are done; no later phase has been started.
 
 - **Phase 0: single cycling card.** Done. One card at a time, rotating through the whitelisted servers.
 - **Phase 1: one grid of all whitelisted servers.** Done. One image with a tile per server, CPU/RAM and history graph, offline servers shown dimmed, a fallback card when the monitor is unreachable, unit tests.
-- **Phase 2: public-repo standard and deployment.** In progress. .NET 10, locked restores, warnings as errors, format check, CI/CodeQL/release workflows, Dependabot, version hooks, non-root image with `/health` and a built-in healthcheck, single-card endpoint limited to the whitelist, image published to GHCR, then deployed from the `stacks` repo through Arcane.
+- **Phase 2: public-repo standard and deployment.** Done (1.0.0, deployed 2026-11-15). .NET 10, locked restores, warnings as errors, format check, CI/CodeQL/release workflows, Dependabot, version hooks, non-root image with `/health` and a built-in healthcheck, single-card endpoint limited to the whitelist, image published to GHCR, then deployed from the `stacks` repo through Arcane.
 - **Later (ideas only, not started, not confirmed):**
   - A per-game icon in each tile's icon badge.
   - Player counts per server, if the monitor can provide them.
