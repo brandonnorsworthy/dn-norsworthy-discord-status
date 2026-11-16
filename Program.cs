@@ -3,9 +3,18 @@ using Microsoft.Extensions.Caching.Memory;
 using StatusImageCard.Api;
 using StatusImageCard.Config;
 using StatusImageCard.Discord;
+using StatusImageCard.Health;
 using StatusImageCard.Helper;
 using StatusImageCard.Service;
 
+// `dotnet StatusImageCard.dll healthcheck`: probe the running instance and exit, no web host started.
+if (args is [HealthCheckCommand.Arg])
+{
+    var url = HealthCheckCommand.DefaultUrl(Environment.GetEnvironmentVariable("ASPNETCORE_HTTP_PORTS"));
+    return await HealthCheckCommand.RunAsync(url, TimeSpan.FromSeconds(5));
+}
+
+// Loads a local .env for development runs; a missing file is ignored (the image ships without one).
 DotNetEnv.Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,9 +27,8 @@ RequireHelper.Require(builder.Configuration, EnvKeys.DiscordWebhookUrl);
 
 builder.Services.AddMemoryCache();
 
-builder.Services.AddSingleton<ContainerRotationService>();
-builder.Services.AddSingleton<IContainerRotationService>(sp => sp.GetRequiredService<ContainerRotationService>());
 builder.Services.AddSingleton<IInternalApiService, InternalApiService>();
+builder.Services.AddSingleton<IStatusImageService, StatusImageService>();
 
 builder.Services.AddHttpClient<DiscordWebhookClient>(c =>
 {
@@ -29,7 +37,7 @@ builder.Services.AddHttpClient<DiscordWebhookClient>(c =>
 
 builder.Services.AddHostedService<DiscordStatusUpdaterService>();
 
-builder.Services.AddHttpClient("api", c =>
+builder.Services.AddHttpClient(InternalApiService.ClientName, c =>
 {
     var baseUrl = builder.Configuration[EnvKeys.BaseUrl];
     if (string.IsNullOrEmpty(baseUrl))
@@ -43,48 +51,58 @@ builder.Services.AddSingleton(jsonOpts);
 
 var app = builder.Build();
 
+// Liveness only: no monitor call, so it stays cheap and answers even when the monitor is down.
+app.MapGet(HealthCheckCommand.Path, () => Results.Text("Healthy"));
+
+// GET /status.png             -> grid of every whitelisted server (cached briefly)
+// GET /status.png?container=x -> one card for the whitelisted container whose name or id prefix is x (404 otherwise)
 app.MapGet("/status.png", async (
     HttpContext http,
-    IHttpClientFactory httpClientFactory,
+    IStatusImageService statusImages,
     IMemoryCache cache,
-    ContainerRotationService rotation,
-    JsonSerializerOptions jsonOptions,
     ILogger<Program> log,
     CancellationToken ct) =>
 {
-    const int hours = 6;
-    const int cacheSeconds = 60 * 5;
+    const int cacheSeconds = 60;
+    const string gridCacheKey = "status-png:grid";
+
+    string? selector = http.Request.Query["container"].ToString().Trim();
+    if (string.IsNullOrEmpty(selector))
+        selector = null;
 
     try
     {
-        bool pinned = http.Request.Query.TryGetValue("container", out var cv) &&
-                      !string.IsNullOrWhiteSpace(cv.ToString());
-        string? containerSelector = pinned ? cv.ToString() : null;
-
-        string cacheKey = pinned
-            ? $"status-png:pinned:{containerSelector}:{hours}"
-            : $"status-png:rotating:{hours}";
-
-        // keep endpoint behavior: still uses cached png bytes
-        var png = await rotation.GenerateStatusAsync(
-            cacheKey: cacheKey,
-            cacheSeconds: cacheSeconds,
-            cache: cache,
-            httpClientFactory: httpClientFactory,
-            jsonOpts: jsonOptions,
-            hours: hours,
-            pinnedContainerSelector: containerSelector,
-            ct: ct);
+        byte[] png;
+        if (selector is null)
+        {
+            if (!cache.TryGetValue(gridCacheKey, out byte[]? cached) || cached is null)
+            {
+                var result = await statusImages.RenderGridAsync(ct);
+                cached = result.PngBytes;
+                if (!result.IsFallback)
+                    cache.Set(gridCacheKey, cached, TimeSpan.FromSeconds(cacheSeconds));
+            }
+            png = cached;
+        }
+        else
+        {
+            png = await statusImages.RenderSingleAsync(selector, ct);
+        }
 
         http.Response.Headers.CacheControl = $"public,max-age={cacheSeconds}";
-        return Results.File(png.PngBytes, "image/png");
+        return Results.File(png, "image/png");
     }
-    catch (Exception ex)
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (Exception ex) when (!ct.IsCancellationRequested)
     {
         log.LogError(ex, "Failed to generate /status.png");
-        var fallback = StatusCardRenderService.RenderAllOffline(width: 640, height: 420);
+        var fallback = StatusCardRenderService.RenderAllOffline(StatusCardRenderService.TileWidth, StatusCardRenderService.TileHeight);
         return Results.File(fallback, "image/png");
     }
 });
 
 app.Run();
+return 0;

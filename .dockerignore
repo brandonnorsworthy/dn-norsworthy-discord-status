@@ -1,0 +1,21 @@
+# Secrets and local state never go into the build context.
+.env
+.env.*
+!.env.example
+data/
+
+# Build output and tooling.
+**/bin/
+**/obj/
+**/TestResults/
+tests/
+.git/
+.github/
+.githooks/
+.vs/
+.vscode/
+.idea/
+
+# Not needed to build the image.
+Assets/
+*.md

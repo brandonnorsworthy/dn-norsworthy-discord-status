@@ -1,11 +1,9 @@
-﻿using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using StatusImageCard.Config;
 using StatusImageCard.Service;
 using System.Net;
-using System.Text.Json;
 
 namespace StatusImageCard.Discord;
 
@@ -16,29 +14,20 @@ public sealed class DiscordStatusUpdaterService : BackgroundService
     private readonly DiscordWebhookClient _discord;
     private readonly DiscordMessageIdStore _store;
 
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IContainerRotationService _rotation;
-    private readonly IMemoryCache _cache;
-    private readonly JsonSerializerOptions _jsonOpts;
+    private readonly IStatusImageService _statusImages;
 
     public DiscordStatusUpdaterService(
         ILogger<DiscordStatusUpdaterService> log,
         IConfiguration cfg,
         DiscordWebhookClient discord,
-        IHttpClientFactory httpClientFactory,
         IHostEnvironment env,
-        IContainerRotationService containerRotationService,
-        IMemoryCache cache,
-        JsonSerializerOptions jsonOpts)
+        IStatusImageService statusImages)
     {
         _log = log;
         _cfg = cfg;
         _discord = discord;
 
-        _httpClientFactory = httpClientFactory;
-        _rotation = containerRotationService;
-        _cache = cache;
-        _jsonOpts = jsonOpts;
+        _statusImages = statusImages;
 
         // Always file-based; no env for message id.
         var path = Path.Combine(env.ContentRootPath, "data", "message-id.txt");
@@ -47,7 +36,7 @@ public sealed class DiscordStatusUpdaterService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
 
         await SafeUpdateOnceAsync(stoppingToken);
 
@@ -81,25 +70,12 @@ public sealed class DiscordStatusUpdaterService : BackgroundService
             return;
         }
 
-        const int hours = 6;
-        const int cacheSeconds = 60;
         const string fileName = "status.png";
 
         var nowUnix = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var cacheKey = $"status-png:rotating:{hours}";
 
-        var result = await _rotation.GenerateStatusAsync(
-            cacheKey: cacheKey,
-            cacheSeconds: cacheSeconds,
-            cache: _cache,
-            httpClientFactory: _httpClientFactory,
-            jsonOpts: _jsonOpts,
-            hours: hours,
-            pinnedContainerSelector: null,
-            ct: ct);
-
-        var currentServer = result.CurrentlyShowing;
-        var onlineServers = result.OnlineServers;
+        // Always render fresh for Discord; the HTTP endpoint's cache is not used here.
+        var result = await _statusImages.RenderGridAsync(ct);
         var pngBytes = result.PngBytes;
 
         var payload = new
@@ -109,9 +85,7 @@ public sealed class DiscordStatusUpdaterService : BackgroundService
                 new
                 {
                     title = "Current Server Status",
-                    description =
-                        $"Generated at <t:{nowUnix}>\n" +
-                        $"Current Online Servers: {string.Join(", ", onlineServers)}",
+                    description = DiscordDescriptionBuilder.Build(nowUnix, result.OnlineServers, result.OfflineServers),
                     image = new { url = $"attachment://{fileName}" },
                     color = 3066993
                 }

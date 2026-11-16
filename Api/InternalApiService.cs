@@ -1,115 +1,42 @@
-﻿using StatusImageCard.Helper;
+﻿using System.Text.Json;
 using StatusImageCard.Models;
-using StatusImageCard.Service;
-using System.ComponentModel;
-using System.Text.Json;
 
 namespace StatusImageCard.Api
 {
-    public class InternalApiService : IInternalApiService
+    public sealed class InternalApiService : IInternalApiService
     {
-        private readonly ILogger<InternalApiService> _log;
+        public const string ClientName = "api";
 
-        public InternalApiService(ILogger<InternalApiService> log)
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly JsonSerializerOptions _jsonOpts;
+
+        public InternalApiService(IHttpClientFactory httpClientFactory, JsonSerializerOptions jsonOpts)
         {
-            _log = log;
+            _httpClientFactory = httpClientFactory;
+            _jsonOpts = jsonOpts;
         }
 
-        public async Task<ContainerCard> FetchFromApi(IHttpClientFactory factory, string containerSelector, int hours, JsonSerializerOptions jsonOpts, CancellationToken ct)
+        public async Task<List<ZcogContainerModel>> FetchSnapshotAsync(CancellationToken ct)
         {
-            try
-            {
-                var client = factory.CreateClient("api");
+            var client = _httpClientFactory.CreateClient(ClientName);
 
-                // 1) current snapshot list
-                var listResp = await client.GetAsync("/api/containers/stats/", ct);
-                listResp.EnsureSuccessStatusCode();
+            using var resp = await client.GetAsync("/api/containers/stats/", ct);
+            resp.EnsureSuccessStatusCode();
 
-                var list = await listResp.Content.ReadFromJsonAsync<List<ZcogContainerModel>>(jsonOpts, ct) ?? new List<ZcogContainerModel>();
+            var list = await resp.Content.ReadFromJsonAsync<List<ZcogContainerModel>>(_jsonOpts, ct) ?? [];
 
-                // Find by exact name, or by id prefix, or full id
-                var current = list.FirstOrDefault(x =>
-                    x.Name.Equals(containerSelector, StringComparison.OrdinalIgnoreCase) ||
-                    x.Id.StartsWith(containerSelector, StringComparison.OrdinalIgnoreCase));
-
-                if (current == null)
-                {
-                    throw new Exception("Current container not found");
-                }
-
-                // 2) history for that container
-                var histUrl = $"/api/containers/stats/{current.Id}?h={hours}";
-                var histResp = await client.GetAsync(histUrl, ct);
-                histResp.EnsureSuccessStatusCode();
-
-                var hist = await histResp.Content.ReadFromJsonAsync<List<ZcogContainerModel>>(jsonOpts, ct) ?? new List<ZcogContainerModel>();
-
-                return MapToCard(current, hist, hours);
-            }
-            catch (Exception)
-            {
-                _log.LogError("Error fetching container data for '{ContainerSelector}'", containerSelector);
-                throw;
-            }
-        }
-
-        private ContainerCard MapToCard(ZcogContainerModel current, List<ZcogContainerModel> history, int hours)
-        {
-            // memory values from your API appear to be MB; convert to GB for display
-            double usedGb = current.MemoryCurrent / 1024.0;
-            double maxGb = current.MemoryMax / 1024.0;
-
-            var state = current.State?.Equals("running", StringComparison.OrdinalIgnoreCase) == true
-                ? StatusState.Online
-                : StatusState.Offline;
-
-            string statusText = state == StatusState.Online ? "Online" : "Offline";
-
-            // status string already contains the "Up ..." text in your payload
-            string uptime = ContainerTextHelper.ExtractUpPrefix(current.Status) ?? (state == StatusState.Online ? "Up" : "Down");
-            string health = ContainerTextHelper.ExtractHealthSuffix(current.Status) ?? (state == StatusState.Online ? "healthy" : "unhealthy");
-
-            // Build chart samples from history
-            var usage = new List<UsageSample>(history.Count);
-            foreach (var h in history)
-            {
-                var ts = ContainerTextHelper.ParseZcogTimestamp(h.Timestamp);
-                usage.Add(new UsageSample
-                {
-                    TsUtc = ts,
-                    CpuPercent = h.CpuPercent,
-                    MemoryPercent = h.MemoryPercent
-                });
-            }
-
-            return new ContainerCard
-            {
-                Name = current.Name,
-                IdShort = current.Id.Length >= 12 ? current.Id[..12] + "..." : current.Id,
-                StatusState = state,
-                StatusText = statusText,
-                UptimeText = uptime,
-                HealthText = health,
-                CpuNowPercent = current.CpuPercent,
-                MemoryUsedGb = Math.Round(usedGb, 2),
-                MemoryTotalGb = Math.Round(maxGb, 2),
-                Subtitle = $"Usage History (Last {hours} hour{(hours == 1 ? "" : "s")})",
-                UsageLastDay = usage
-            };
-        }
-
-        public async Task<List<ZcogContainerModel>> FetchSnapshotAsync(IHttpClientFactory httpClientFactory, JsonSerializerOptions jsonOpts, CancellationToken ct)
-        {
-            var client = httpClientFactory.CreateClient("api");
-
-            var listResp = await client.GetAsync("/api/containers/stats/", ct);
-            listResp.EnsureSuccessStatusCode();
-
-            var list = await listResp.Content.ReadFromJsonAsync<List<ZcogContainerModel>>(jsonOpts, ct)
-                       ?? new List<ZcogContainerModel>();
-
-            // Keep API order, but drop items missing ID/Name
+            // Keep API order, but drop items missing id or name.
             return list.Where(x => !string.IsNullOrWhiteSpace(x.Id) && !string.IsNullOrWhiteSpace(x.Name)).ToList();
+        }
+
+        public async Task<List<ZcogContainerModel>> FetchHistoryAsync(string containerId, int hours, CancellationToken ct)
+        {
+            var client = _httpClientFactory.CreateClient(ClientName);
+
+            using var resp = await client.GetAsync($"/api/containers/stats/{Uri.EscapeDataString(containerId)}?h={hours}", ct);
+            resp.EnsureSuccessStatusCode();
+
+            return await resp.Content.ReadFromJsonAsync<List<ZcogContainerModel>>(_jsonOpts, ct) ?? [];
         }
     }
 }

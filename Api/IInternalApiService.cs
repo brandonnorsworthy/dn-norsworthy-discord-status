@@ -1,11 +1,13 @@
 ﻿using StatusImageCard.Models;
-using System.Text.Json;
 
 namespace StatusImageCard.Api
 {
     public interface IInternalApiService
     {
-        Task<List<ZcogContainerModel>> FetchSnapshotAsync(IHttpClientFactory httpClientFactory, JsonSerializerOptions jsonOpts, CancellationToken ct);
-        Task<ContainerCard> FetchFromApi(IHttpClientFactory factory, string containerSelector, int hours, JsonSerializerOptions jsonOpts, CancellationToken ct);
+        /// <summary>Current stats for every container the monitor knows (GET /api/containers/stats/).</summary>
+        Task<List<ZcogContainerModel>> FetchSnapshotAsync(CancellationToken ct);
+
+        /// <summary>History samples for one container (GET /api/containers/stats/{id}?h=hours).</summary>
+        Task<List<ZcogContainerModel>> FetchHistoryAsync(string containerId, int hours, CancellationToken ct);
     }
 }

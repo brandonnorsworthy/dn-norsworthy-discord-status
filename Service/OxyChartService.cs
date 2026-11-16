@@ -1,4 +1,4 @@
-﻿using OxyPlot;
+using OxyPlot;
 using OxyPlot.Axes;
 using OxyPlot.Series;
 using OxyPlot.SkiaSharp;
@@ -11,7 +11,7 @@ namespace StatusImageCard.Service
         private static readonly OxyColor CpuBlue = OxyColor.FromRgb(59, 130, 246);
         private static readonly OxyColor MemGreen = OxyColor.FromRgb(34, 197, 94);
 
-        public static PlotModel BuildUsagePlot(List<UsageSample> samples)
+        public static PlotModel BuildUsagePlot(IReadOnlyList<UsageSample> samples)
         {
             var model = new PlotModel
             {
@@ -28,7 +28,9 @@ namespace StatusImageCard.Service
             model.Axes.Add(new DateTimeAxis
             {
                 Position = AxisPosition.Bottom,
-                StringFormat = "yyyy-MM-ddTHH:mm:ss",
+                StringFormat = "HH:mm",
+                IntervalType = DateTimeIntervalType.Hours,
+                MinorIntervalType = DateTimeIntervalType.Hours,
                 MajorGridlineStyle = LineStyle.Solid,
                 MajorGridlineColor = grid,
                 MinorGridlineStyle = LineStyle.None,
@@ -41,6 +43,7 @@ namespace StatusImageCard.Service
             {
                 Position = AxisPosition.Left,
                 Minimum = 0,
+                MaximumPadding = 0.1,
                 MajorGridlineStyle = LineStyle.Solid,
                 MajorGridlineColor = grid,
                 MinorGridlineStyle = LineStyle.None,

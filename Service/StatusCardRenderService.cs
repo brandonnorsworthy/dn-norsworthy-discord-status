@@ -5,6 +5,12 @@ namespace StatusImageCard.Service
 {
     public static partial class StatusCardRenderService
     {
+        public const int TileWidth = 640;
+        public const int TileHeight = 420;
+
+        /// <summary>Opacity (0-255) of an offline tile drawn over the page background.</summary>
+        private const byte OfflineTileAlpha = 120;
+
         private static readonly SKColor PageBg = SKColor.Parse("#0b0d10");
         private static readonly SKColor CardBg = SKColor.Parse("#14161a");
         private static readonly SKColor CardBorder = SKColor.Parse("#262a31");
@@ -14,19 +20,63 @@ namespace StatusImageCard.Service
 
         private static readonly SKColor OnlinePill = SKColor.Parse("#22c55e");
         private static readonly SKColor OnlineText = SKColor.Parse("#0b0d10");
-        private static readonly SKColor OfflinePill = SKColor.Parse("#2b2f37");
+        private static readonly SKColor OfflinePill = SKColor.Parse("#4b5260");
         private static readonly SKColor OfflineText = MainText;
 
         private static readonly SKColor CpuBlue = SKColor.Parse("#3b82f6");
         private static readonly SKColor MemGreen = SKColor.Parse("#22c55e");
 
+        /// <summary>Renders one card as its own image.</summary>
         public static byte[] Render(ContainerCard c, int width, int height)
         {
             using var bmp = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
             using var canvas = new SKCanvas(bmp);
 
             canvas.Clear(PageBg);
+            DrawTile(canvas, c, 0, 0, width, height);
 
+            return EncodePng(bmp);
+        }
+
+        /// <summary>Renders every card in one grid image (see <see cref="GridLayout"/>).</summary>
+        public static byte[] RenderGrid(IReadOnlyList<ContainerCard> cards)
+        {
+            ArgumentOutOfRangeException.ThrowIfZero(cards.Count);
+
+            var layout = GridLayout.Compute(cards.Count, TileWidth, TileHeight);
+
+            using var bmp = new SKBitmap(layout.Width, layout.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+            using var canvas = new SKCanvas(bmp);
+
+            canvas.Clear(PageBg);
+            for (int i = 0; i < cards.Count; i++)
+                DrawTile(canvas, cards[i], layout.Tiles[i].X, layout.Tiles[i].Y, TileWidth, TileHeight);
+
+            return EncodePng(bmp);
+        }
+
+        private static void DrawTile(SKCanvas canvas, ContainerCard c, float originX, float originY, int width, int height)
+        {
+            bool offline = c.StatusState == StatusState.Offline;
+
+            canvas.Save();
+            canvas.Translate(originX, originY);
+
+            // Offline tiles are drawn into a translucent layer so the whole card is dimmed against the page.
+            using var dimPaint = new SKPaint { Color = SKColors.White.WithAlpha(OfflineTileAlpha) };
+            if (offline)
+                canvas.SaveLayer(new SKRect(0, 0, width, height), dimPaint);
+
+            DrawCard(canvas, c, width, height);
+
+            if (offline)
+                canvas.Restore();
+
+            canvas.Restore();
+        }
+
+        private static void DrawCard(SKCanvas canvas, ContainerCard c, int width, int height)
+        {
             float pad = 18;
             var cardRect = new SKRect(pad, pad, width - pad, height - pad);
 
@@ -40,14 +90,7 @@ namespace StatusImageCard.Service
 
             float textLeft = iconRect.Right + 16;
 
-            using var nameFont = new SKFont { Size = 20 };
-            using var namePaint = new SKPaint { IsAntialias = true, Color = MainText };
-            canvas.DrawText(c.Name, textLeft, y0 + 24, SKTextAlign.Left, nameFont, namePaint);
-
-            using var idFont = new SKFont { Size = 13 };
-            using var idPaint = new SKPaint { IsAntialias = true, Color = MutedText };
-            canvas.DrawText(c.IdShort, textLeft, y0 + 44, SKTextAlign.Left, idFont, idPaint);
-
+            // Pill first, so the name can be clipped to the space left of it.
             string pillText = c.StatusText;
             var (pillFill, pillTextColor) = c.StatusState == StatusState.Online
                 ? (OnlinePill, OnlineText)
@@ -65,16 +108,24 @@ namespace StatusImageCard.Service
             canvas.DrawText(pillText, pillRect.Left + pillPadX, pillRect.MidY + pillFont.Size * 0.35f,
                 SKTextAlign.Left, pillFont, pillPaint);
 
+            float nameMaxW = pillRect.Left - 12 - textLeft;
+
+            using var nameFont = new SKFont { Size = 20 };
+            using var namePaint = new SKPaint { IsAntialias = true, Color = MainText };
+            canvas.DrawText(Ellipsize(c.Name, nameFont, nameMaxW), textLeft, y0 + 24, SKTextAlign.Left, nameFont, namePaint);
+
+            using var idFont = new SKFont { Size = 13 };
+            using var idPaint = new SKPaint { IsAntialias = true, Color = MutedText };
+            canvas.DrawText(c.IdShort, textLeft, y0 + 44, SKTextAlign.Left, idFont, idPaint);
+
             using var upFont = new SKFont { Size = 13 };
             using var upPaint = new SKPaint { IsAntialias = true, Color = MutedText };
-            canvas.DrawText($"{c.UptimeText} ({c.HealthText})", x0, y0 + 75, SKTextAlign.Left, upFont, upPaint);
+            canvas.DrawText(Ellipsize(c.DetailText, upFont, cardRect.Width - 36), x0, y0 + 75, SKTextAlign.Left, upFont, upPaint);
 
             float metricsY = y0 + 104;
 
-            DrawInlineLabelValue(canvas, x0, metricsY, "CPU: ", $"{c.CpuNowPercent:0.##}%", MutedText, MainText);
-
-            string memValue = $"{c.MemoryUsedGb:0.##}GB / {c.MemoryTotalGb:0.##}GB";
-            DrawInlineLabelValue(canvas, cardRect.MidX + 20, metricsY, "Memory: ", memValue, MutedText, MainText);
+            DrawInlineLabelValue(canvas, x0, metricsY, "CPU: ", c.CpuText, MutedText, MainText);
+            DrawInlineLabelValue(canvas, cardRect.MidX + 20, metricsY, "Memory: ", c.MemoryText, MutedText, MainText);
 
             float divY = metricsY + 18;
             using (var divPaint = new SKPaint { IsAntialias = true, Color = Divider, StrokeWidth = 1 })
@@ -85,24 +136,58 @@ namespace StatusImageCard.Service
             canvas.DrawText("Usage History", cardRect.MidX, divY + 28, SKTextAlign.Center, chartTitleFont, chartTitlePaint);
 
             float legendY = divY + 52;
+            var plotRect = new SKRect(cardRect.Left + 5, legendY + 16, cardRect.Right - 5, cardRect.Bottom - 22);
+
+            if (c.StatusState == StatusState.Offline)
+            {
+                DrawCentredMessage(canvas, plotRect, "Offline", 22);
+                return;
+            }
+
             DrawLegendItem(canvas, cardRect.MidX - 60, legendY, CpuBlue, "CPU %");
             DrawLegendItem(canvas, cardRect.MidX + 10, legendY, MemGreen, "Memory %");
 
-            if (!string.IsNullOrWhiteSpace(c.Subtitle))
-            {
-                using var subFont = new SKFont { Size = 12 };
-                using var subPaint = new SKPaint { IsAntialias = true, Color = MutedText };
+            using (var subFont = new SKFont { Size = 12 })
+            using (var subPaint = new SKPaint { IsAntialias = true, Color = MutedText })
                 canvas.DrawText(c.Subtitle, x0, legendY + 22, SKTextAlign.Left, subFont, subPaint);
+
+            if (c.UsageHistory is not { Count: > 0 } history)
+            {
+                DrawCentredMessage(canvas, plotRect, "No history available", 15);
+                return;
             }
 
-            var plotRect = new SKRect(cardRect.Left + 5, legendY + 16, cardRect.Right - 5, cardRect.Bottom - 22);
-
-            var plot = OxyChartService.BuildUsagePlot(c.UsageLastDay);
+            var plot = OxyChartService.BuildUsagePlot(history);
             var chartPng = OxyChartService.RenderPlotPng(plot, (int)plotRect.Width, (int)plotRect.Height);
 
-            using (var chartBmp = SKBitmap.Decode(chartPng))
-                canvas.DrawBitmap(chartBmp, plotRect);
+            using var chartBmp = SKBitmap.Decode(chartPng);
+            canvas.DrawBitmap(chartBmp, plotRect);
+        }
 
+        private static void DrawCentredMessage(SKCanvas canvas, SKRect area, string text, float size)
+        {
+            using var font = new SKFont { Size = size };
+            using var paint = new SKPaint { IsAntialias = true, Color = MutedText };
+            canvas.DrawText(text, area.MidX, area.MidY + size * 0.35f, SKTextAlign.Center, font, paint);
+        }
+
+        private static string Ellipsize(string text, SKFont font, float maxWidth)
+        {
+            if (maxWidth <= 0 || font.MeasureText(text) <= maxWidth)
+                return text;
+
+            const string ellipsis = "...";
+            for (int len = text.Length - 1; len > 0; len--)
+            {
+                var candidate = text[..len].TrimEnd() + ellipsis;
+                if (font.MeasureText(candidate) <= maxWidth)
+                    return candidate;
+            }
+            return ellipsis;
+        }
+
+        private static byte[] EncodePng(SKBitmap bmp)
+        {
             using var img = SKImage.FromBitmap(bmp);
             using var data = img.Encode(SKEncodedImageFormat.Png, 100);
             return data.ToArray();
@@ -189,16 +274,13 @@ namespace StatusImageCard.Service
             var title = "All servers offline";
             var sub = "No whitelisted containers are currently running.";
 
-            // center vertically a bit above middle
             float cx = cardRect.MidX;
             float cy = cardRect.MidY;
 
             canvas.DrawText(title, cx, cy - 6, SKTextAlign.Center, titleFont, titlePaint);
             canvas.DrawText(sub, cx, cy + 18, SKTextAlign.Center, subFont, subPaint);
 
-            using var img = SKImage.FromBitmap(bmp);
-            using var data = img.Encode(SKEncodedImageFormat.Png, 100);
-            return data.ToArray();
+            return EncodePng(bmp);
         }
     }
 }
