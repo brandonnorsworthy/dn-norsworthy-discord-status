@@ -1,5 +1,5 @@
 # Build stage: restore from the committed lock file, then publish.
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 
 # Project file and lock file first, so the restore layer is cached until dependencies change.
