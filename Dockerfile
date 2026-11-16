@@ -10,7 +10,7 @@ COPY . ./
 RUN dotnet publish StatusImageCard.csproj -c Release -o /out --no-restore /p:UseAppHost=false
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
 
 # fontconfig and a font for SkiaSharp/OxyPlot text rendering.
 RUN apt-get update \
