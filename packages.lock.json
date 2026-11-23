@@ -14,12 +14,9 @@
       },
       "HarfBuzzSharp.NativeAssets.Linux": {
         "type": "Direct",
-        "requested": "[7.3.0, )",
-        "resolved": "7.3.0",
-        "contentHash": "m6F2pEBTN0zTRgQ3caJQRGQkZZizZwHHCbu+rTv+gvwteNBOpqOLD5GE4dB9TFjNNpnyHXtfuMD86JuUra9UvA==",
-        "dependencies": {
-          "HarfBuzzSharp": "7.3.0"
-        }
+        "requested": "[14.4.0.200, )",
+        "resolved": "14.4.0.200",
+        "contentHash": "uDpYgXX2wXTI9Og7Qw1XNzaCiZloshLfHUvOg3ZWPjipynYVmMSCRl3Y5UeNAVEq5fOaGfs47tljueP7kXpfoQ=="
       },
       "OxyPlot.SkiaSharp": {
         "type": "Direct",
