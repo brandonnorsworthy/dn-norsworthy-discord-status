@@ -15,7 +15,7 @@
     <PackageReference Include="OxyPlot.SkiaSharp" Version="2.2.0" />
     <PackageReference Include="SkiaSharp" Version="3.119.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.1" />
-    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="7.3.0" />
+    <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" Version="14.4.0.200" />
   </ItemGroup>
 
   <!-- The test project lives under tests/; keep its sources and build output out of this project. -->
