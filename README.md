@@ -11,7 +11,7 @@ One Discord message that always shows the current status of every game server I 
 **Feature set (finished product):**
 
 - One PNG grid with a tile per whitelisted game server: name, short id, online/offline pill, a health heart (green or red), plain uptime ("up for 2 weeks"), current CPU and memory, and a 6-hour CPU/memory history graph.
-- Offline servers stay in the grid as dimmed tiles, so a stopped server is visible rather than missing.
+- Offline servers stay in the grid as dimmed tiles, so a stopped server is visible rather than missing. An offline tile is collapsed to half height (name, id, Offline pill and when it exited), and two of them share the space of one online tile, so the image stays short.
 - A Discord webhook message that is posted once and then edited in place every 5 minutes (a deleted message is re-posted automatically).
 - `GET /status.png` serves the same grid (cached for 60 seconds); `GET /status.png?container=<name>` serves one server's card.
 - Only whitelisted containers are ever shown; nothing else the monitor knows about can be read through this service.
@@ -24,11 +24,12 @@ What it looks like (the grid posted to Discord):
 
 ## Phases
 
-Phases 0 to 2 are done; no later phase has been started.
+Phases 0 to 3 are done; no later phase has been started.
 
 - **Phase 0: single cycling card.** Done. One card at a time, rotating through the whitelisted servers.
 - **Phase 1: one grid of all whitelisted servers.** Done. One image with a tile per server, CPU/RAM and history graph, offline servers shown dimmed, a fallback card when the monitor is unreachable, unit tests.
 - **Phase 2: public-repo standard and deployment.** Done (1.0.0, deployed 2026-11-15). .NET 10, locked restores, warnings as errors, format check, CI/CodeQL/release workflows, Dependabot, version hooks, non-root image with `/health` and a built-in healthcheck, single-card endpoint limited to the whitelist, image published to GHCR, then deployed from the `stacks` repo through Arcane.
+- **Phase 3: compact offline tiles.** Done (1.2.0). Offline tiles are half height and pair up two per tile slot, so the grid is shorter when servers are stopped.
 - **Later (ideas only, not started, not confirmed):**
   - A per-game icon in each tile's icon badge.
   - Player counts per server, if the monitor can provide them.
@@ -37,7 +38,7 @@ Phases 0 to 2 are done; no later phase has been started.
 
 Every 5 minutes the service asks the monitor API for all container stats (`GET /api/containers/stats/`), keeps only the whitelisted containers, fetches 6 hours of history for the online ones (`GET /api/containers/stats/{id}?h=6`, at most 4 at a time), renders the grid with SkiaSharp and OxyPlot, and edits the Discord message with the new image. The id of that message is kept in `/app/data/message-id.txt`.
 
-Tile order: online servers first, then offline, each alphabetical. Layout: 1 column for one server, 2 columns for up to 6, 3 columns for 7 or more. If the monitor is unreachable or no whitelisted container exists, a single "All servers offline" card is shown instead.
+Tile order: online servers first, then offline, each alphabetical. Layout: a cell is one full tile slot. Each online tile fills a cell; two offline tiles share one cell, stacked at half height each (an odd last offline tile sits in the top half of its own cell). The number of columns comes from the cell count: 1 column for one cell, 2 columns for up to 6, 3 columns for 7 or more; a partly filled last row is centred. If the monitor is unreachable or no whitelisted container exists, a single "All servers offline" card is shown instead.
 
 ## Configuration
 

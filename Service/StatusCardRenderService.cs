@@ -8,6 +8,9 @@ namespace StatusImageCard.Service
         public const int TileWidth = 640;
         public const int TileHeight = 420;
 
+        /// <summary>Height of a compact offline tile: half a cell.</summary>
+        public const int CompactTileHeight = TileHeight / 2;
+
         /// <summary>Opacity (0-255) of an offline tile drawn over the page background.</summary>
         private const byte OfflineTileAlpha = 120;
 
@@ -45,19 +48,28 @@ namespace StatusImageCard.Service
         {
             ArgumentOutOfRangeException.ThrowIfZero(cards.Count);
 
-            var layout = GridLayout.Compute(cards.Count, TileWidth, TileHeight);
+            // Online tiles first, then offline (the layout expects this order); each group keeps its given order.
+            var ordered = cards.Where(c => c.StatusState != StatusState.Offline)
+                .Concat(cards.Where(c => c.StatusState == StatusState.Offline))
+                .ToList();
+            int offlineCount = ordered.Count(c => c.StatusState == StatusState.Offline);
+
+            var layout = GridLayout.Compute(ordered.Count - offlineCount, offlineCount, TileWidth, TileHeight);
 
             using var bmp = new SKBitmap(layout.Width, layout.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
             using var canvas = new SKCanvas(bmp);
 
             canvas.Clear(PageBg);
-            for (int i = 0; i < cards.Count; i++)
-                DrawTile(canvas, cards[i], layout.Tiles[i].X, layout.Tiles[i].Y, TileWidth, TileHeight);
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                var tile = layout.Tiles[i];
+                DrawTile(canvas, ordered[i], tile.X, tile.Y, TileWidth, tile.Compact ? CompactTileHeight : TileHeight, tile.Compact);
+            }
 
             return EncodePng(bmp);
         }
 
-        private static void DrawTile(SKCanvas canvas, ContainerCard c, float originX, float originY, int width, int height)
+        private static void DrawTile(SKCanvas canvas, ContainerCard c, float originX, float originY, int width, int height, bool compact = false)
         {
             bool offline = c.StatusState == StatusState.Offline;
 
@@ -69,7 +81,7 @@ namespace StatusImageCard.Service
             if (offline)
                 canvas.SaveLayer(new SKRect(0, 0, width, height), dimPaint);
 
-            DrawCard(canvas, c, width, height);
+            DrawCard(canvas, c, width, height, compact);
 
             if (offline)
                 canvas.Restore();
@@ -77,7 +89,7 @@ namespace StatusImageCard.Service
             canvas.Restore();
         }
 
-        private static void DrawCard(SKCanvas canvas, ContainerCard c, int width, int height)
+        private static void DrawCard(SKCanvas canvas, ContainerCard c, int width, int height, bool compact)
         {
             float pad = 18;
             var cardRect = new SKRect(pad, pad, width - pad, height - pad);
@@ -132,6 +144,10 @@ namespace StatusImageCard.Service
             using var upFont = new SKFont { Size = 13 };
             using var upPaint = new SKPaint { IsAntialias = true, Color = MutedText };
             canvas.DrawText(Ellipsize(c.DetailText, upFont, cardRect.Width - 36), x0, y0 + 75, SKTextAlign.Left, upFont, upPaint);
+
+            // A compact (offline) tile stops here: no metrics, chart or "Offline" message.
+            if (compact)
+                return;
 
             float metricsY = y0 + 104;
 
